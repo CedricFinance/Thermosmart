@@ -11,7 +11,7 @@
 
 #define CRC_POLY 0x31
 #define MAX_SENSORS 8
-#define DEBUG
+#define DEBUG_OFF
 
 struct Sensor {
   byte sensorId;
@@ -21,6 +21,8 @@ struct Sensor {
   byte resetFlag;
   byte weakBatt;
 };
+
+void printSensor(Sensor sensor);
 
 Sensor sensors[MAX_SENSORS];
 
@@ -50,7 +52,10 @@ void loop() {
   if (rf12_recvDone()) {
     //we receive a packet, let's check if it's an IT+ one
     if (ITPlusFrame && CheckITPlusCRC()) {
-      ReadITPlusValue();
+      int entryNum = ReadITPlusValue();
+
+      printSensor(sensors[entryNum]);
+      Serial.println();
     }
   }
   if (Serial.available() > 0) {
@@ -65,13 +70,8 @@ void loop() {
           Serial.print("|"); //print sensors delimiter
         }
         first = false;
-        printHex(sensors[i].sensorId);
-        Serial.print(":");
-        //first bit for negative sign
-        if (sensors[i].temp & 0b10000000) Serial.print("-");
-        Serial.print(sensors[i].temp & 0x7f, DEC);
-        Serial.print(".");
-        Serial.print(sensors[i].decimalTemp, DEC);
+
+        printSensor(sensors[i]);
         
         //data retrieved, erase the sensor
         sensors[i].sensorId = 0;
@@ -159,29 +159,8 @@ int ReadITPlusValue() {
       sensors[i].weakBatt = weakBatt;
     }
   }
-  
-  #ifdef DEBUG
-    Serial.print("Id: "); printHex(sensorId);
-    if (resetFlag)
-      Serial.print(" R");
-    else
-      Serial.print("  ");
-      
-    if (weakBatt)
-      Serial.print("B");
-    else
-      Serial.print(" ");
-      
-    Serial.print(" Temp: ");
-    if (temp & 0b10000000)
-      Serial.print("-");
-    if (temp < 10) Serial.print("0");
-    Serial.print(temp & 0x7f, DEC); Serial.print("."); Serial.print(decimalTemp, DEC);
-    if (hygro != 106) {
-      Serial.print(" Hygro: "); Serial.print(hygro, DEC); Serial.print("%");
-    }
-    Serial.println();
-  #endif
+
+  return pos;
 }
 
 /*
@@ -191,3 +170,60 @@ void printHex(byte data) {
   if (data < 16) Serial.print('0');
   Serial.print(data, HEX);
 }
+
+#ifdef DEBUG
+void printSensor(Sensor sensor) {
+  Serial.print("Id: "); printHex(sensor.sensorId);
+  if (sensor.resetFlag)
+    Serial.print(" R");
+  else
+    Serial.print("  ");
+
+  if (sensor.weakBatt)
+    Serial.print("B");
+  else
+    Serial.print(" ");
+
+  Serial.print(" Temp: ");
+  if (sensor.temp & 0b10000000)
+    Serial.print("-");
+  if (sensor.temp < 10) Serial.print("0");
+  Serial.print(sensor.temp & 0x7f, DEC); Serial.print("."); Serial.print(sensor.decimalTemp, DEC);
+  if (sensor.hygro != 106) {
+    Serial.print(" Hygro: "); Serial.print(sensor.hygro, DEC); Serial.print("%");
+  }
+}
+#else
+void printSensor(Sensor sensor) {
+  printHex(sensor.sensorId);
+  
+  Serial.print(",");
+
+  //first bit for negative sign
+  if (sensor.temp & 0b10000000) Serial.print("-");
+  Serial.print(sensor.temp & 0x7f, DEC);
+  Serial.print(".");
+  Serial.print(sensor.decimalTemp, DEC);
+
+  Serial.print(",");
+
+  if (sensor.hygro != 106) {
+    Serial.print(sensor.hygro, DEC);
+  }
+
+  Serial.print(",");
+
+  if (sensor.resetFlag)
+    Serial.print("R");
+  else
+    Serial.print("");
+
+  Serial.print(",");
+
+  if (sensor.weakBatt)
+    Serial.print("B");
+  else
+    Serial.print("");
+}
+#endif
+
