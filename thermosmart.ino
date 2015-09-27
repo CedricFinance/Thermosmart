@@ -10,7 +10,6 @@
 #include <RF12.h>
 
 #define CRC_POLY 0x31
-#define MAX_SENSORS 8
 #define DEBUG_OFF
 
 struct Sensor {
@@ -24,7 +23,7 @@ struct Sensor {
 
 void printSensor(Sensor sensor);
 
-Sensor sensors[MAX_SENSORS];
+Sensor sensor;
 
 void setup() {
   rf12_initialize(1, RF12_868MHZ, 0xd4);
@@ -41,43 +40,16 @@ void setup() {
 /*
  * The loop read the packets received by the RF12
  * and try to decode it with the TX29 protocol.
- * If it succeed, it stores the result into
- * the sensors array.
- * 
- * Then, if there's something on the serial line,
- * it print all the data contained in the array
- * then clear the sensors array.
+ * If it succeed, it prints it to the serial line.
  */
 void loop() {
   if (rf12_recvDone()) {
     //we receive a packet, let's check if it's an IT+ one
     if (ITPlusFrame && CheckITPlusCRC()) {
-      int entryNum = ReadITPlusValue();
-
-      printSensor(sensors[entryNum]);
+      ReadITPlusValue();
+      printSensor(sensor);
       Serial.println();
     }
-  }
-  if (Serial.available() > 0) {
-    //emptying the buffer
-    Serial.read();
-    
-    //printing all temperatures
-    boolean first = true;
-    for (int i = 0 ; i < MAX_SENSORS ; i++) {
-      if (sensors[i].sensorId != 0) {
-        if (!first) {
-          Serial.print("|"); //print sensors delimiter
-        }
-        first = false;
-
-        printSensor(sensors[i]);
-        
-        //data retrieved, erase the sensor
-        sensors[i].sensorId = 0;
-      }
-    }
-    Serial.println();
   }
 }
 
@@ -116,7 +88,7 @@ boolean CheckITPlusCRC() {
 /*
  * The CRC has been check, this method decode the TX29
  * packet to extract the data, then store it into the
- * sensors array.
+ * sensor variable.
  */ 
 int ReadITPlusValue() {
   byte temp, decimalTemp, sensorId, resetFlag, hygro, weakBatt;
@@ -146,21 +118,12 @@ int ReadITPlusValue() {
   weakBatt = rf12_buf[3] & 0x80;
   hygro = rf12_buf[3] & 0x7f;
   
-  //check the Sensors array to find a empty space
-  for (int i = 0 ; i < MAX_SENSORS && pos < 0 ; i++) {
-    if (sensors[i].sensorId == 0 || sensors[i].sensorId == sensorId) {
-      //that's a free space, store values in it
-      pos = i;
-      sensors[i].sensorId = sensorId;
-      sensors[i].temp = temp;
-      sensors[i].decimalTemp = decimalTemp;
-      sensors[i].hygro = hygro;
-      sensors[i].resetFlag = resetFlag;
-      sensors[i].weakBatt = weakBatt;
-    }
-  }
-
-  return pos;
+  sensor.sensorId = sensorId;
+  sensor.temp = temp;
+  sensor.decimalTemp = decimalTemp;
+  sensor.hygro = hygro;
+  sensor.resetFlag = resetFlag;
+  sensor.weakBatt = weakBatt;
 }
 
 /*
@@ -171,29 +134,6 @@ void printHex(byte data) {
   Serial.print(data, HEX);
 }
 
-#ifdef DEBUG
-void printSensor(Sensor sensor) {
-  Serial.print("Id: "); printHex(sensor.sensorId);
-  if (sensor.resetFlag)
-    Serial.print(" R");
-  else
-    Serial.print("  ");
-
-  if (sensor.weakBatt)
-    Serial.print("B");
-  else
-    Serial.print(" ");
-
-  Serial.print(" Temp: ");
-  if (sensor.temp & 0b10000000)
-    Serial.print("-");
-  if (sensor.temp < 10) Serial.print("0");
-  Serial.print(sensor.temp & 0x7f, DEC); Serial.print("."); Serial.print(sensor.decimalTemp, DEC);
-  if (sensor.hygro != 106) {
-    Serial.print(" Hygro: "); Serial.print(sensor.hygro, DEC); Serial.print("%");
-  }
-}
-#else
 void printSensor(Sensor sensor) {
   printHex(sensor.sensorId);
   
@@ -225,5 +165,4 @@ void printSensor(Sensor sensor) {
   else
     Serial.print("");
 }
-#endif
 
